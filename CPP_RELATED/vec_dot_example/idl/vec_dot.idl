@@ -1,0 +1,16 @@
+#include "AEEStdDef.idl"
+
+interface vec_dot {
+
+    AEEResult init();
+
+    AEEResult deinit();
+
+    AEEResult set_param(in long param_id, in long value);
+
+    AEEResult get_param(in long param_id, rout long value);
+
+    AEEResult process(in sequence<octet> vec_a,
+                      in sequence<octet> vec_b,
+                      rout sequence<octet> result);
+};
