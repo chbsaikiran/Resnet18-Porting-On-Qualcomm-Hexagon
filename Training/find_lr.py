@@ -25,7 +25,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 data_module = CIFAR10DataModule(
-        batch_size=64,
+        batch_size=512,
         num_workers=4
     )
 
@@ -88,7 +88,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
 datamodule = CIFAR10DataModule(
-    batch_size=64,
+    batch_size=512,
     num_workers=4
 )
 

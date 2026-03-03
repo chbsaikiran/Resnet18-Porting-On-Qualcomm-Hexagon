@@ -18,3 +18,5 @@ checkpoints_pruning
 build
 calculate_accuracy
 video_infer
+*.png
+tb_logs/
