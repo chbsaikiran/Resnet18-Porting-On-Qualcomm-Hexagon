@@ -16,3 +16,5 @@ imagenet10
 lightning_logs
 checkpoints_pruning
 build
+calculate_accuracy
+video_infer
