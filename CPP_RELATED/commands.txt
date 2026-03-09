@@ -2,6 +2,19 @@ cmake ..  -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake  -DAND
 
 export LD_LIBRARY_PATH=/data/local/tmp:$LD_LIBRARY_PATH
 
+adb push build_dsp/libvec_dot_skel.so /data/local/tmp/
+adb shell "ADSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/vec_dot_arm 1024"
+
+adb push /home/saikiran/Android/ndk/android-ndk-r27d/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so /data/local/tmp/
+
+adb shell "LD_LIBRARY_PATH=/data/local/tmp ADSP_LIBRARY_PATH=/data/local/tmp /data/local/tmp/vec_dot_arm 1024"
+
+python3 $HEXAGON_SDK_ROOT/tools/elfsigner/elfsigner.py \
+    -t 0x791ff979 \
+    -o /tmp/testsig
+
+adb push /tmp/testsig/testsig-0x791ff979.so /data/local/tmp/
+
 1️⃣ What is NDK?
 
 NDK (Native Development Kit) allows you to:

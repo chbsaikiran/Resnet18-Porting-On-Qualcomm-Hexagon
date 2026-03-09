@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CIFAR-10 Classifier</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 540px;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+
+    .drop-zone {
+      border: 2px dashed #334155;
+      border-radius: 16px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #1e293b;
+      position: relative;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #6366f1;
+      background: #1e1b4b;
+    }
+
+    .drop-zone input { display: none; }
+
+    .drop-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+
+    .drop-text { color: #94a3b8; }
+    .drop-text strong { color: #818cf8; }
+
+    .preview-wrapper {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 1.5rem;
+    }
+
+    .preview-wrapper.visible { display: flex; }
+
+    .preview-img {
+      width: 160px;
+      height: 160px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 2px solid #334155;
+      image-rendering: pixelated;
+    }
+
+    .file-name {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    .btn {
+      display: block;
+      width: 100%;
+      margin-top: 1.5rem;
+      padding: 0.85rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: #6366f1;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn:hover { background: #4f46e5; }
+    .btn:disabled { background: #334155; cursor: not-allowed; }
+
+    .results {
+      display: none;
+      margin-top: 1.5rem;
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 1.25rem 1.5rem;
+    }
+
+    .results.visible { display: block; }
+
+    .results h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #cbd5e1;
+    }
+
+    .result-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.6rem;
+    }
+
+    .result-row:first-of-type .bar-fill { background: #6366f1; }
+
+    .rank {
+      width: 1.5rem;
+      font-size: 0.8rem;
+      color: #64748b;
+      flex-shrink: 0;
+    }
+
+    .label-name {
+      width: 7rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      flex-shrink: 0;
+      text-transform: capitalize;
+    }
+
+    .bar {
+      flex: 1;
+      height: 24px;
+      background: #0f172a;
+      border-radius: 6px;
+      overflow: hidden;
+      margin: 0 0.75rem;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: #334155;
+      border-radius: 6px;
+      transition: width 0.5s ease;
+    }
+
+    .conf-value {
+      width: 3.5rem;
+      text-align: right;
+      font-size: 0.85rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .error-msg {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: #7f1d1d;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    .error-msg.visible { display: block; }
+
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2px solid #fff4;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.5rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CIFAR-10 Classifier</h1>
+    <p class="subtitle">ResNet18 &middot; ONNX Runtime inference</p>
+
+    <div class="drop-zone" id="dropZone">
+      <span class="drop-icon">&#128247;</span>
+      <p class="drop-text"><strong>Click to upload</strong> or drag &amp; drop</p>
+      <p class="drop-text" style="font-size:0.8rem; margin-top:0.3rem">PNG, JPG, BMP</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="preview-wrapper" id="previewWrapper">
+      <img id="previewImg" class="preview-img" alt="preview">
+      <span class="file-name" id="fileName"></span>
+    </div>
+
+    <button class="btn" id="classifyBtn" disabled>Classify</button>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="results" id="results">
+      <h2>Predictions</h2>
+      <div id="resultRows"></div>
+    </div>
+  </div>
+
+  <script>
+    const dropZone    = document.getElementById('dropZone');
+    const fileInput   = document.getElementById('fileInput');
+    const previewWrap = document.getElementById('previewWrapper');
+    const previewImg  = document.getElementById('previewImg');
+    const fileName    = document.getElementById('fileName');
+    const classifyBtn = document.getElementById('classifyBtn');
+    const resultsDiv  = document.getElementById('results');
+    const resultRows  = document.getElementById('resultRows');
+    const errorMsg    = document.getElementById('errorMsg');
+
+    let selectedFile = null;
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+    function handleFile(file) {
+      selectedFile = file;
+      fileName.textContent = file.name;
+      previewImg.src = URL.createObjectURL(file);
+      previewWrap.classList.add('visible');
+      classifyBtn.disabled = false;
+      resultsDiv.classList.remove('visible');
+      errorMsg.classList.remove('visible');
+    }
+
+    classifyBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      classifyBtn.disabled = true;
+      classifyBtn.innerHTML = '<span class="spinner"></span>Classifying…';
+      errorMsg.classList.remove('visible');
+      resultsDiv.classList.remove('visible');
+
+      const form = new FormData();
+      form.append('image', selectedFile);
+
+      try {
+        const res = await fetch('/predict', { method: 'POST', body: form });
+        const data = await res.json();
+
+        if (data.error) {
+          errorMsg.textContent = data.error;
+          errorMsg.classList.add('visible');
+        } else {
+          renderResults(data.predictions);
+        }
+      } catch (err) {
+        errorMsg.textContent = 'Request failed: ' + err.message;
+        errorMsg.classList.add('visible');
+      }
+
+      classifyBtn.disabled = false;
+      classifyBtn.textContent = 'Classify';
+    });
+
+    function renderResults(preds) {
+      resultRows.innerHTML = '';
+      preds.forEach((p, i) => {
+        const confNum = parseFloat(p.confidence);
+        const row = document.createElement('div');
+        row.className = 'result-row';
+        row.innerHTML = `
+          <span class="rank">${i + 1}.</span>
+          <span class="label-name">${p.label}</span>
+          <div class="bar"><div class="bar-fill" style="width:${confNum}%"></div></div>
+          <span class="conf-value">${p.confidence}</span>
+        `;
+        resultRows.appendChild(row);
+      });
+      resultsDiv.classList.add('visible');
+    }
+  </script>
+</body>
+</html>

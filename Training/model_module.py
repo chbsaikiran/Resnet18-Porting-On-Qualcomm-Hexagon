@@ -90,22 +90,34 @@ class ResNet18Lightning(pl.LightningModule):
         self.log("val_acc", acc, prog_bar=True)
 
     def configure_optimizers(self):
+        # optimizer = torch.optim.SGD(
+        #     self.model.parameters(),
+        #     lr=self.lr,
+        #     momentum=0.9,
+        #     weight_decay=5e-4
+        # )
+
+        # scheduler = OneCycleLR(
+        #     optimizer,
+        #     max_lr=self.lr,
+        #     epochs=self.epochs,
+        #     steps_per_epoch=self.len_train_loader,
+        #     pct_start=0.3,
+        #     anneal_strategy='cos',
+        #     div_factor=25,
+        #     final_div_factor=1e4
+        # )
         optimizer = torch.optim.SGD(
             self.model.parameters(),
-            lr=self.lr,
+            lr=0.1,
             momentum=0.9,
             weight_decay=5e-4
         )
 
-        scheduler = OneCycleLR(
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
             optimizer,
-            max_lr=self.lr,
-            epochs=self.epochs,
-            steps_per_epoch=self.len_train_loader,
-            pct_start=0.3,
-            anneal_strategy='cos',
-            div_factor=25,
-            final_div_factor=1e4
+            milestones=[100,150],
+            gamma=0.1
         )
 
         return {

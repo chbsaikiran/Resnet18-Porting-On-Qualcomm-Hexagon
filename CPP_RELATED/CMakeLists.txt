@@ -1,13 +1,14 @@
 cmake_minimum_required(VERSION 3.10)
 project(calc_accuracy)
 
-include_directories(~/onnxruntime/include)
+set(ORT_DIR "$ENV{HOME}/onnxruntime")
+set(OCV_DIR "$ENV{HOME}/opencv/build_android/install/sdk/native/jni")
 
-link_directories(~/onnxruntime/build/Android/Release)
+include_directories(${ORT_DIR}/include)
+link_directories(${ORT_DIR}/build/Android/Release)
 
-include_directories(~/opencv/build_android/install/sdk/native/jni/include)
-
-link_directories(~/opencv/build_android/lib/arm64-v8a)
+include_directories(${OCV_DIR}/include)
+link_directories($ENV{HOME}/opencv/build_android/lib/${ANDROID_ABI})
 
 add_executable(calc_accuracy arm_calculate_accuracy.cpp)
 target_link_libraries(calc_accuracy

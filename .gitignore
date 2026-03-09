@@ -20,3 +20,12 @@ calculate_accuracy
 video_infer
 *.png
 tb_logs/
+build_dsp/
+build_arm/
+qnn_resnet18.cpp
+qnn_resnet18.dlc
+qnn_resnet18.h
+qnn_resnet18.o
+qnn_resnet18.so
+qnn_resnet18.h
+qnn_resnet18.h

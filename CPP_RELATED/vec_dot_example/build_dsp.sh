@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-HEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT:-/opt/hexagon/sdk}
+HEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT:-/home/saikiran/Qualcomm/Hexagon_SDK/5.5.6.0/5.5.6.0}
 HEXAGON_TOOLS_ROOT=${HEXAGON_TOOLS_ROOT:-${HEXAGON_SDK_ROOT}/tools}
 HEXAGON_ARCH=${HEXAGON_ARCH:-v68}
 
@@ -75,4 +75,4 @@ echo ""
 echo ">>> Build complete: ${BUILD_DIR}/libvec_dot_skel.so"
 echo ""
 echo "Deploy:"
-echo "  adb push ${BUILD_DIR}/libvec_dot_skel.so /vendor/lib/rfsa/dsp/"
+#echo "  adb push ${BUILD_DIR}/libvec_dot_skel.so /vendor/lib/rfsa/dsp/"

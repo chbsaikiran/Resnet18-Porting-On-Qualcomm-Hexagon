@@ -128,7 +128,7 @@ NOT needed for the vec_dot_example.
 
   5.3  Add to ~/.bashrc:
 
-         export QNN_SDK_ROOT=~/Qualcomm/AIStack/QNN/<version>
+         export QNN_SDK_ROOT=/opt/qcom/aistack/qairt/2.31.0.250130
          export PATH=${QNN_SDK_ROOT}/bin:${PATH}
          export LD_LIBRARY_PATH=${QNN_SDK_ROOT}/lib/x86_64-linux-clang:${LD_LIBRARY_PATH}
 

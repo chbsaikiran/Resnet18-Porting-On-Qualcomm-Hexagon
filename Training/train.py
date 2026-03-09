@@ -82,7 +82,7 @@ def main():
             print(f"[resume] Using checkpoint → {ckpt_path}")
 
     batch_size = 512
-    epochs = 200
+    epochs = 20
     cifar10_train_size = 50000
 
     data_module = CIFAR10DataModule(
@@ -110,13 +110,13 @@ def main():
         save_top_k=1
     )
 
-    early_stop_callback = EarlyStopping(
-        monitor="val_loss",
-        mode="min",
-        patience=3,
-        min_delta=0.001,
-        verbose=True
-    )
+    # early_stop_callback = EarlyStopping(
+    #     monitor="val_loss",
+    #     mode="min",
+    #     patience=3,
+    #     min_delta=0.001,
+    #     verbose=True
+    # )
 
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
@@ -125,7 +125,7 @@ def main():
         accelerator="auto",
         devices=1,
         logger=tb_logger,
-        callbacks=[checkpoint_callback, early_stop_callback, lr_monitor]
+        callbacks=[checkpoint_callback, lr_monitor]
     )
 
     trainer.fit(model, datamodule=data_module, ckpt_path=ckpt_path)

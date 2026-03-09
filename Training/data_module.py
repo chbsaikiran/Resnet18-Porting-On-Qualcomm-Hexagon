@@ -193,7 +193,7 @@ class CIFAR10_OpenCV(Dataset):
                 img = cv2.flip(img, 1)
 
             # RandAugment (OpenCV-based)
-            img = rand_augment(img, num_ops=2, magnitude=9)
+            # img = rand_augment(img, num_ops=2, magnitude=9)
 
         # BGR -> RGB
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)

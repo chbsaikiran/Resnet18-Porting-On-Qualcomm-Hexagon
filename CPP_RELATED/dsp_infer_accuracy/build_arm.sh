@@ -1,9 +1,9 @@
 #!/bin/bash
 # ======================================================================
-# build_arm.sh  –  Vector dot-product ARM host
+# build_arm.sh  –  CIFAR-10 DSP accuracy ARM host
 #
-# Builds the ARM binary that calls into the DSP via FastRPC.
-# No OpenCV or other heavy dependencies – just FastRPC + rpcmem.
+# Builds the ARM binary that loads images, preprocesses on ARM,
+# and sends each tensor to the Hexagon DSP for inference via FastRPC.
 #
 # Requirements:
 #   - Android NDK installed   (set NDK_ROOT)
@@ -11,8 +11,12 @@
 #   - qaic-generated stub from build_dsp.sh must exist
 #
 # Deploy & run:
-#   adb push build_arm/vec_dot_arm /data/local/tmp/
-#   adb shell '/data/local/tmp/vec_dot_arm 1024'
+#   adb push build_arm/cifar10_dsp_accuracy /data/local/tmp/
+#   adb push <model.dlc>                    /data/local/tmp/
+#   adb push <test_batch.bin>               /data/local/tmp/
+#   adb shell '/data/local/tmp/cifar10_dsp_accuracy \
+#       /data/local/tmp/resnet18_cifar10.dlc \
+#       /data/local/tmp/test_batch.bin'
 # ======================================================================
 
 set -euo pipefail
@@ -36,7 +40,7 @@ mkdir -p "${BUILD_DIR}"
 
 # ---- Check stub exists -----------------------------------------------
 
-STUB_C="${BUILD_DSP_DIR}/vec_dot_stub.c"
+STUB_C="${BUILD_DSP_DIR}/cifar10_infer_stub.c"
 if [ ! -f "${STUB_C}" ]; then
     echo "ERROR: ${STUB_C} not found.  Run build_dsp.sh first."
     exit 1
@@ -60,7 +64,7 @@ ${CXX} -O2 -std=c++17 "${COMMON_INCLUDES[@]}" -c \
 echo ">>> Compiling stub (as C) ..."
 ${CC} -O2 -std=c11 "${COMMON_INCLUDES[@]}" -c \
     "${STUB_C}" \
-    -o "${BUILD_DIR}/vec_dot_stub.o"
+    -o "${BUILD_DIR}/cifar10_infer_stub.o"
 
 # ---- Link ------------------------------------------------------------
 
@@ -70,16 +74,18 @@ FASTRPC_LIBS=(
     "${HEXAGON_SDK_ROOT}/ipc/fastrpc/rpcmem/prebuilt/android_aarch64/rpcmem.a"
 )
 
-echo ">>> Linking vec_dot_arm ..."
-${CXX} -o "${BUILD_DIR}/vec_dot_arm" \
+echo ">>> Linking cifar10_dsp_accuracy ..."
+${CXX} -o "${BUILD_DIR}/cifar10_dsp_accuracy" \
     "${BUILD_DIR}/main.o" \
-    "${BUILD_DIR}/vec_dot_stub.o" \
+    "${BUILD_DIR}/cifar10_infer_stub.o" \
     "${FASTRPC_LIBS[@]}" \
     -llog -ldl
 
 echo ""
-echo ">>> Build complete: ${BUILD_DIR}/vec_dot_arm"
+echo ">>> Build complete: ${BUILD_DIR}/cifar10_dsp_accuracy"
 echo ""
 echo "Deploy & run:"
-#echo "  adb push ${BUILD_DIR}/vec_dot_arm /data/local/tmp/"
-#echo "  adb shell '/data/local/tmp/vec_dot_arm 1024'"
+echo "  adb push ${BUILD_DIR}/cifar10_dsp_accuracy /data/local/tmp/"
+echo "  adb shell '/data/local/tmp/cifar10_dsp_accuracy \\"
+echo "      /data/local/tmp/resnet18_cifar10.dlc \\"
+echo "      /data/local/tmp/test_batch.bin'"
