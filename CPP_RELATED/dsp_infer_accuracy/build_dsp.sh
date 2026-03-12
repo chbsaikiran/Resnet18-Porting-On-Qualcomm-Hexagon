@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-HEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT:-/home/saikiran/Qualcomm/Hexagon_SDK/5.5.6.0/5.5.6.0}
+HEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT:-/home/saikiran/Qualcomm/Hexagon_SDK/6.5.0.0}
 HEXAGON_TOOLS_ROOT=${HEXAGON_TOOLS_ROOT:-${HEXAGON_SDK_ROOT}/tools}
 HEXAGON_ARCH=${HEXAGON_ARCH:-v68}
 
@@ -59,11 +59,29 @@ EXTRA_DEFINES=()
 EXTRA_LIBS=()
 
 # Uncomment ONE of the following for a real NN backend:
+#
+# --- SNPE ---
 # EXTRA_DEFINES+=(-DUSE_SNPE -I "${SNPE_ROOT}/include/zdl")
 # EXTRA_LIBS+=(-L "${SNPE_ROOT}/lib/hexagon-v68" -lSNPE)
 #
-# EXTRA_DEFINES+=(-DUSE_QNN -I "${QNN_SDK_ROOT}/include/QNN")
-# EXTRA_LIBS+=(-L "${QNN_SDK_ROOT}/lib/hexagon-v68" -lQnnHtp)
+# --- QNN (context binary .bin) ---
+# Prepare the .bin first:
+#   1. qnn-onnx-converter --input_network resnet18_cifar10.onnx \
+#                          --output_path resnet18_cifar10
+#   2. qnn-model-lib-generator -c resnet18_cifar10.cpp \
+#                               -b resnet18_cifar10.bin \
+#                               -t ${HEXAGON_TOOLS_ROOT}
+#   3. qnn-context-binary-generator \
+#          --model resnet18_cifar10/resnet18_cifar10.so \
+#          --backend libQnnHtp.so \
+#          --binary_file resnet18_cifar10_ctx.bin
+# Then push the .bin to /data/local/tmp/ on the device.
+#
+# QAIRT_ROOT=${QAIRT_ROOT:-/opt/qcom/aistack/qairt/2.31.0.250130}
+# EXTRA_DEFINES+=(-DUSE_QNN
+#                 -I "${QAIRT_ROOT}/include/QNN"
+#                 -I "${QAIRT_ROOT}/include/QNN/HTP")
+# EXTRA_LIBS+=(-L "${QAIRT_ROOT}/lib/hexagon-${HEXAGON_ARCH}" -lQnnHtp)
 
 echo ">>> Compiling skel ..."
 ${HEXAGON_CC} "${CFLAGS[@]}" "${EXTRA_DEFINES[@]+"${EXTRA_DEFINES[@]}"}" -c \

@@ -2,21 +2,25 @@
 # ======================================================================
 # deploy_qnn.sh  –  Deploy QNN ResNet18 model to SDM710 device
 #
-# Pushes the model library, QNN DSP runtime, and qnn-net-run to
-# /data/local/tmp on the Android device.
+# Pushes the model library, QNN runtime (CPU/GPU/DSP backends), and
+# qnn-net-run to /data/local/tmp on the Android device.
 #
-# SDM710 has Hexagon 685 (v66 arch) → uses QnnDsp backend.
+# For DSP: pushes the V66 DSP skel + stub libs.  SDM710 has Hexagon 685
+# (V65); the closest available backend in QAIRT 2.31.0 is the V66 DSP
+# backend — it may work via backward compatibility.
 # ======================================================================
 
 set -euo pipefail
 
 QAIRT_ROOT=${QAIRT_ROOT:-/opt/qcom/aistack/qairt/2.31.0.250130}
+HEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT:-/home/saikiran/Qualcomm/Hexagon_SDK/6.5.0.0}
+NDK_ROOT=${NDK_ROOT:-/home/saikiran/NDK/android-ndk-r27d}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEVICE_DIR=/data/local/tmp/qnn_resnet18
 
 # --- Paths to QNN components -------------------------------------------
 QNN_NET_RUN="${QAIRT_ROOT}/bin/aarch64-android/qnn-net-run"
-MODEL_SO="${SCRIPT_DIR}/model_libs/aarch64-android/libresnet18_cifar10.so"
+MODEL_SO="${SCRIPT_DIR}/lib/aarch64-android/libresnet18_cifar10.so"
 
 ARM_LIBS="${QAIRT_ROOT}/lib/aarch64-android"
 DSP_LIBS="${QAIRT_ROOT}/lib/hexagon-v66/unsigned"
@@ -39,29 +43,45 @@ adb push "$QNN_NET_RUN" "${DEVICE_DIR}/"
 echo ">>> Pushing model library ..."
 adb push "$MODEL_SO" "${DEVICE_DIR}/"
 
-echo ">>> Pushing QNN backend libs ..."
-adb push "${ARM_LIBS}/libQnnCpu.so"                    "${DEVICE_DIR}/"
-adb push "${ARM_LIBS}/libQnnGpu.so"                    "${DEVICE_DIR}/"
-adb push "${ARM_LIBS}/libQnnSystem.so"                 "${DEVICE_DIR}/"
+echo ">>> Pushing QNN backend libs (CPU / GPU) ..."
+adb push "${ARM_LIBS}/libQnnCpu.so"    "${DEVICE_DIR}/"
+adb push "${ARM_LIBS}/libQnnGpu.so"    "${DEVICE_DIR}/"
+adb push "${ARM_LIBS}/libQnnSystem.so" "${DEVICE_DIR}/"
 
-# NOTE: SDM710 Hexagon 685 = DSP V65, but QAIRT 2.31.0 only ships V66+.
-#       DSP backend is NOT supported on this device.
-#       Use --backend libQnnGpu.so (GPU) or libQnnCpu.so (CPU) instead.
+echo ">>> Pushing QNN DSP backend libs (ARM-side) ..."
+adb push "${ARM_LIBS}/libQnnDsp.so"                  "${DEVICE_DIR}/"
+adb push "${ARM_LIBS}/libQnnDspV66Stub.so"            "${DEVICE_DIR}/"
+adb push "${ARM_LIBS}/libQnnDspNetRunExtensions.so"   "${DEVICE_DIR}/"
+
+echo ">>> Pushing QNN DSP skel libs (DSP-side, hexagon-v66) ..."
+adb push "${DSP_LIBS}/libQnnDspV66Skel.so" "${DEVICE_DIR}/"
+adb push "${DSP_LIBS}/libQnnDspV66.so"     "${DEVICE_DIR}/"
 
 echo ">>> Pushing libc++_shared.so (NDK) ..."
-NDK_ROOT=${NDK_ROOT:-/home/saikiran/Android/ndk/android-ndk-r27d}
 LIBCPP="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
 if [ -f "$LIBCPP" ]; then
     adb push "$LIBCPP" "${DEVICE_DIR}/"
+else
+    echo "WARNING: libc++_shared.so not found at $LIBCPP"
 fi
 
-echo ">>> Pushing test signature ..."
-TESTSIG="/tmp/testsig/testsig-0x791ff979.so"
-if [ -f "$TESTSIG" ]; then
-    adb push "$TESTSIG" "${DEVICE_DIR}/"
+# --- Test signature for unsigned DSP loading ---------------------------
+echo ">>> Generating & pushing DSP test signature ..."
+SIGNER="${HEXAGON_SDK_ROOT}/utils/scripts/signer.py"
+TESTSIG_DIR="${SCRIPT_DIR}/testsig"
+if [ -f "$SIGNER" ]; then
+    mkdir -p "$TESTSIG_DIR"
+    SERIAL=$(adb shell getprop ro.serialno 2>/dev/null | tr -d '\r\n')
+    if [ -n "$SERIAL" ]; then
+        python3 "$SIGNER" --serial "$SERIAL" --output "$TESTSIG_DIR" 2>/dev/null || \
+        python  "$SIGNER" --serial "$SERIAL" --output "$TESTSIG_DIR" 2>/dev/null || true
+    fi
+    for sig in "$TESTSIG_DIR"/testsig-*.so; do
+        [ -f "$sig" ] && adb push "$sig" "${DEVICE_DIR}/" && echo "  pushed $(basename $sig)"
+    done
 else
-    echo "WARNING: test signature not found at $TESTSIG"
-    echo "  DSP may refuse to load unsigned skel libraries."
+    echo "  WARNING: signer.py not found at $SIGNER"
+    echo "  If DSP loading fails, generate a test signature manually."
 fi
 
 echo ""
@@ -70,4 +90,5 @@ echo ""
 echo "Files on device at ${DEVICE_DIR}/:"
 adb shell "ls -la ${DEVICE_DIR}/"
 echo ""
-echo "To run inference, use run_qnn_infer.sh"
+echo "To run inference:  ./run_qnn_infer.sh [NUM_IMAGES] [BACKEND]"
+echo "  Backends: libQnnDsp.so (DSP) | libQnnCpu.so (CPU) | libQnnGpu.so (GPU)"

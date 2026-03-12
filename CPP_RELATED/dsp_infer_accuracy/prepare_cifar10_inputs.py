@@ -1,22 +1,23 @@
 """
 prepare_cifar10_inputs.py
 
-Reads the CIFAR-10 binary test batch file and writes each image as a raw
-float32 file that qnn-net-run can consume.
+Reads a CIFAR-10 test batch (binary *or* Python-pickle format) and writes
+each image as a raw float32 file that qnn-net-run can consume.
 
-Output layout: NCHW  (1, 3, 32, 32) — matching the ONNX model input.
+Output layout per file: HWC  (32, 32, 3) — QNN expects NHWC; the batch
+dimension is implicit (one image per file).
 Normalised with CIFAR-10 mean/std.
 
 Usage:
     python prepare_cifar10_inputs.py \
-        --test_batch ../../../Training/data/cifar-10-batches-bin/test_batch.bin \
+        --test_batch ../../../Training/data/cifar-10-batches-py/test_batch \
         --output_dir ./qnn_inputs \
         --num_images 100
 """
 
 import argparse
 import os
-import struct
+import pickle
 import numpy as np
 
 CIFAR10_MEAN = np.array([0.4914, 0.4822, 0.4465], dtype=np.float32)
@@ -28,26 +29,52 @@ CLASSES = [
 ]
 
 
+def _normalise(img_chw_uint8):
+    """uint8 CHW → float32 HWC, normalised."""
+    img = img_chw_uint8.astype(np.float32) / 255.0
+    for c in range(3):
+        img[c] = (img[c] - CIFAR10_MEAN[c]) / CIFAR10_STD[c]
+    return img.transpose(1, 2, 0)  # CHW → HWC
+
+
+def load_cifar10_pickle(path):
+    """Load the Python-pickle format (cifar-10-batches-py/test_batch)."""
+    with open(path, "rb") as f:
+        batch = pickle.load(f, encoding="bytes")
+
+    raw_labels = batch[b"labels"]
+    raw_data = batch[b"data"]  # (N, 3072) uint8
+
+    images, labels = [], []
+    for i in range(len(raw_labels)):
+        pixels = raw_data[i].reshape(3, 32, 32)
+        images.append(_normalise(pixels))
+        labels.append(raw_labels[i])
+    return images, labels
+
+
 def load_cifar10_binary(path):
+    """Load the raw-binary format (cifar-10-batches-bin/test_batch.bin)."""
     with open(path, "rb") as f:
         data = f.read()
 
     num_images = len(data) // 3073
-    labels = []
-    images = []
-
+    images, labels = [], []
     for i in range(num_images):
         offset = i * 3073
         label = data[offset]
         pixels = np.frombuffer(data[offset + 1 : offset + 3073], dtype=np.uint8)
-        img = pixels.reshape(3, 32, 32).astype(np.float32) / 255.0
-        for c in range(3):
-            img[c] = (img[c] - CIFAR10_MEAN[c]) / CIFAR10_STD[c]
-        img = img.transpose(1, 2, 0)  # CHW → HWC (QNN expects NHWC)
+        images.append(_normalise(pixels.reshape(3, 32, 32)))
         labels.append(label)
-        images.append(img)
-
     return images, labels
+
+
+def load_cifar10(path):
+    """Auto-detect format: try pickle first, fall back to raw binary."""
+    try:
+        return load_cifar10_pickle(path)
+    except (pickle.UnpicklingError, KeyError, EOFError):
+        return load_cifar10_binary(path)
 
 
 def main():
@@ -59,7 +86,7 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    images, labels = load_cifar10_binary(args.test_batch)
+    images, labels = load_cifar10(args.test_batch)
     n = min(args.num_images, len(images))
 
     input_list_path = os.path.join(args.output_dir, "input_list.txt")

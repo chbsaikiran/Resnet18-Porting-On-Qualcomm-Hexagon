@@ -21,8 +21,8 @@
 
 set -euo pipefail
 
-NDK_ROOT=${NDK_ROOT:-/home/saikiran/Android/ndk/android-ndk-r27d}
-HEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT:-/home/saikiran/Qualcomm/Hexagon_SDK/5.5.6.0/5.5.6.0}
+NDK_ROOT=${NDK_ROOT:-/home/saikiran/NDK/android-ndk-r27d}
+HEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT:-/home/saikiran/Qualcomm/Hexagon_SDK/6.5.0.0}
 
 API_LEVEL=30
 TARGET=aarch64-linux-android
@@ -66,19 +66,27 @@ ${CC} -O2 -std=c11 "${COMMON_INCLUDES[@]}" -c \
     "${STUB_C}" \
     -o "${BUILD_DIR}/cifar10_infer_stub.o"
 
+RPCMEM_SRC="${HEXAGON_SDK_ROOT}/ipc/fastrpc/rpcmem/src/rpcmem_android.c"
+echo ">>> Compiling rpcmem_android.c ..."
+${CC} -O2 -std=c11 "${COMMON_INCLUDES[@]}" \
+    -I "${HEXAGON_SDK_ROOT}/ipc/fastrpc/rpcmem/src" \
+    -c "${RPCMEM_SRC}" \
+    -o "${BUILD_DIR}/rpcmem_android.o"
+
 # ---- Link ------------------------------------------------------------
 
 FASTRPC_LIBS=(
     -L "${HEXAGON_SDK_ROOT}/ipc/fastrpc/remote/ship/android_aarch64"
-    -ladsprpc
-    "${HEXAGON_SDK_ROOT}/ipc/fastrpc/rpcmem/prebuilt/android_aarch64/rpcmem.a"
+    -lcdsprpc
 )
 
 echo ">>> Linking cifar10_dsp_accuracy ..."
 ${CXX} -o "${BUILD_DIR}/cifar10_dsp_accuracy" \
     "${BUILD_DIR}/main.o" \
     "${BUILD_DIR}/cifar10_infer_stub.o" \
+    "${BUILD_DIR}/rpcmem_android.o" \
     "${FASTRPC_LIBS[@]}" \
+    -static-libstdc++ \
     -llog -ldl
 
 echo ""
@@ -87,5 +95,5 @@ echo ""
 echo "Deploy & run:"
 echo "  adb push ${BUILD_DIR}/cifar10_dsp_accuracy /data/local/tmp/"
 echo "  adb shell '/data/local/tmp/cifar10_dsp_accuracy \\"
-echo "      /data/local/tmp/resnet18_cifar10.dlc \\"
+echo "      /data/local/tmp/resnet18_cifar10.bin \\"
 echo "      /data/local/tmp/test_batch.bin'"

@@ -29,3 +29,7 @@ qnn_resnet18.o
 qnn_resnet18.so
 qnn_resnet18.h
 qnn_resnet18.h
+CPP_RELATED/dsp_infer_accuracy/lib/
+CPP_RELATED/dsp_infer_accuracy/qnn_inputs/
+CPP_RELATED/dsp_infer_accuracy/resnet18_cifar10.bin
+CPP_RELATED/dsp_infer_accuracy/resnet18_cifar10.cpp

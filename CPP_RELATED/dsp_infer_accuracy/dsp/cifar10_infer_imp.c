@@ -96,37 +96,155 @@ static void backend_deinit(void)
 #elif defined(USE_QNN)
 
 #include "QnnInterface.h"
+#include "QnnTypes.h"
+#include "QnnCommon.h"
+#include "QnnBackend.h"
+#include "QnnContext.h"
+#include "QnnGraph.h"
+#include "QnnTensor.h"
 #include "HTP/QnnHtpDevice.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+
 /*
- * QNN integration is device/SOC-specific.  The typical flow is:
- *
- *   1. QnnBackend_create()       → backend handle
- *   2. QnnDevice_create()        → device (HTP) handle
- *   3. QnnContext_createFromBinary() → load .bin context
- *   4. QnnGraph_retrieve()       → get the inference graph
- *   5. QnnGraph_execute()        → run inference
- *
- * Fill in below once your QNN SDK version and target SOC are known.
+ * These names must match the QNN graph produced by qnn-onnx-converter.
+ * Override at compile time if your model uses different names, e.g.
+ *   -DQNN_GRAPH_NAME=\"my_graph\"
  */
+#ifndef QNN_GRAPH_NAME
+#define QNN_GRAPH_NAME  "resnet18_cifar10"
+#endif
+#ifndef QNN_INPUT_NAME
+#define QNN_INPUT_NAME  "input"
+#endif
+#ifndef QNN_OUTPUT_NAME
+#define QNN_OUTPUT_NAME "output"
+#endif
+
+static QNN_INTERFACE_VER_TYPE  g_qnn;
+static Qnn_BackendHandle_t    g_backend = NULL;
+static Qnn_DeviceHandle_t     g_device  = NULL;
+static Qnn_ContextHandle_t    g_context = NULL;
+static Qnn_GraphHandle_t      g_graph   = NULL;
+static uint8_t               *g_ctx_buf = NULL;
 
 static AEEResult backend_init(const char *path)
 {
-    /* TODO: Implement QNN context loading from path */
-    (void)path;
-    return AEE_EFAILED;
+    const QnnInterface_t **providers = NULL;
+    uint32_t num_providers = 0;
+
+    if (QnnInterface_getProviders(&providers, &num_providers) != QNN_SUCCESS
+        || num_providers == 0)
+        return AEE_EFAILED;
+
+    g_qnn = providers[0]->QNN_INTERFACE_VER_NAME;
+
+    if (g_qnn.backendCreate(NULL, NULL, &g_backend) != QNN_SUCCESS)
+        return AEE_EFAILED;
+
+    /* Read the .bin context binary from the device filesystem */
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return AEE_EFAILED;
+
+    fseek(fp, 0, SEEK_END);
+    long fsize = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+
+    if (fsize <= 0) { fclose(fp); return AEE_EFAILED; }
+
+    g_ctx_buf = (uint8_t *)malloc((size_t)fsize);
+    if (!g_ctx_buf) { fclose(fp); return AEE_ENOMEMORY; }
+
+    if ((long)fread(g_ctx_buf, 1, (size_t)fsize, fp) != fsize) {
+        fclose(fp);
+        free(g_ctx_buf);
+        g_ctx_buf = NULL;
+        return AEE_EFAILED;
+    }
+    fclose(fp);
+
+    if (g_qnn.contextCreateFromBinary(g_backend, g_device, NULL,
+                                       g_ctx_buf, (uint64_t)fsize,
+                                       &g_context, NULL) != QNN_SUCCESS)
+        return AEE_EFAILED;
+
+    if (g_qnn.graphRetrieve(g_context, QNN_GRAPH_NAME,
+                             &g_graph) != QNN_SUCCESS)
+        return AEE_EFAILED;
+
+    return AEE_SUCCESS;
 }
 
 static AEEResult backend_infer(const float *input, float *output)
 {
-    /* TODO: Implement QnnGraph_execute() */
-    (void)input; (void)output;
-    return AEE_EFAILED;
+    /*
+     * The ARM host sends NCHW [1,3,32,32] but qnn-onnx-converter with
+     * perform_axes_to_spatial_first_order=True produces an NHWC graph,
+     * so the input tensor expects [1,32,32,3].  Transpose here.
+     */
+    float nhwc[CIFAR10_INPUT_FLOATS];
+    int c, h, w;
+    for (h = 0; h < CIFAR10_IMG_SIZE; h++)
+        for (w = 0; w < CIFAR10_IMG_SIZE; w++)
+            for (c = 0; c < CIFAR10_NUM_CHANNELS; c++)
+                nhwc[(h * CIFAR10_IMG_SIZE + w) * CIFAR10_NUM_CHANNELS + c] =
+                    input[c * CIFAR10_IMG_SIZE * CIFAR10_IMG_SIZE
+                          + h * CIFAR10_IMG_SIZE + w];
+
+    /* ---- input tensor ------------------------------------------------ */
+    uint32_t in_dims[4] = {1, CIFAR10_IMG_SIZE, CIFAR10_IMG_SIZE,
+                           CIFAR10_NUM_CHANNELS};
+    Qnn_ClientBuffer_t in_buf  = {(void *)nhwc,
+                                  CIFAR10_INPUT_FLOATS * sizeof(float)};
+    Qnn_QuantizeParams_t no_qp = QNN_QUANTIZE_PARAMS_INIT;
+
+    Qnn_Tensor_t in_tensor = QNN_TENSOR_INIT;
+    QNN_TENSOR_SET_NAME(in_tensor, QNN_INPUT_NAME);
+    QNN_TENSOR_SET_TYPE(in_tensor, QNN_TENSOR_TYPE_APP_WRITE);
+    QNN_TENSOR_SET_DATA_FORMAT(in_tensor, QNN_TENSOR_DATA_FORMAT_FLAT_BUFFER);
+    QNN_TENSOR_SET_DATA_TYPE(in_tensor, QNN_DATATYPE_FLOAT_32);
+    QNN_TENSOR_SET_QUANT_PARAMS(in_tensor, no_qp);
+    QNN_TENSOR_SET_RANK(in_tensor, 4);
+    QNN_TENSOR_SET_DIMENSIONS(in_tensor, in_dims);
+    QNN_TENSOR_SET_MEM_TYPE(in_tensor, QNN_TENSORMEMTYPE_RAW);
+    QNN_TENSOR_SET_CLIENT_BUF(in_tensor, in_buf);
+
+    /* ---- output tensor ----------------------------------------------- */
+    uint32_t out_dims[2] = {1, CIFAR10_NUM_CLASSES};
+    float    out_data[CIFAR10_NUM_CLASSES];
+    Qnn_ClientBuffer_t out_buf = {(void *)out_data,
+                                  CIFAR10_NUM_CLASSES * sizeof(float)};
+
+    Qnn_Tensor_t out_tensor = QNN_TENSOR_INIT;
+    QNN_TENSOR_SET_NAME(out_tensor, QNN_OUTPUT_NAME);
+    QNN_TENSOR_SET_TYPE(out_tensor, QNN_TENSOR_TYPE_APP_READ);
+    QNN_TENSOR_SET_DATA_FORMAT(out_tensor, QNN_TENSOR_DATA_FORMAT_FLAT_BUFFER);
+    QNN_TENSOR_SET_DATA_TYPE(out_tensor, QNN_DATATYPE_FLOAT_32);
+    QNN_TENSOR_SET_QUANT_PARAMS(out_tensor, no_qp);
+    QNN_TENSOR_SET_RANK(out_tensor, 2);
+    QNN_TENSOR_SET_DIMENSIONS(out_tensor, out_dims);
+    QNN_TENSOR_SET_MEM_TYPE(out_tensor, QNN_TENSORMEMTYPE_RAW);
+    QNN_TENSOR_SET_CLIENT_BUF(out_tensor, out_buf);
+
+    /* ---- execute ----------------------------------------------------- */
+    if (g_qnn.graphExecute(g_graph,
+                            &in_tensor,  1,
+                            &out_tensor, 1,
+                            NULL, NULL) != QNN_SUCCESS)
+        return AEE_EFAILED;
+
+    memcpy(output, out_data, CIFAR10_NUM_CLASSES * sizeof(float));
+    return AEE_SUCCESS;
 }
 
 static void backend_deinit(void)
 {
-    /* TODO: Implement QNN teardown */
+    if (g_context) { g_qnn.contextFree(g_context, NULL); g_context = NULL; }
+    if (g_device)  { g_qnn.deviceFree(g_device);         g_device  = NULL; }
+    if (g_backend) { g_qnn.backendFree(g_backend);        g_backend = NULL; }
+    if (g_ctx_buf) { free(g_ctx_buf);                     g_ctx_buf = NULL; }
+    g_graph = NULL;
 }
 
 /* ------------------------------------------------------------------ */
