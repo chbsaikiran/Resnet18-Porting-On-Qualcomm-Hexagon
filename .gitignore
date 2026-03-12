@@ -33,3 +33,4 @@ CPP_RELATED/dsp_infer_accuracy/lib/
 CPP_RELATED/dsp_infer_accuracy/qnn_inputs/
 CPP_RELATED/dsp_infer_accuracy/resnet18_cifar10.bin
 CPP_RELATED/dsp_infer_accuracy/resnet18_cifar10.cpp
+demo_python_app/
