@@ -31,6 +31,12 @@ qnn_resnet18.h
 qnn_resnet18.h
 CPP_RELATED/dsp_infer_accuracy/lib/
 CPP_RELATED/dsp_infer_accuracy/qnn_inputs/
+CPP_RELATED/dsp_infer_accuracy/qnn_outputs/
+CPP_RELATED/dsp_infer_accuracy/snpe_inputs/
+CPP_RELATED/dsp_infer_accuracy/snpe_outputs/
+CPP_RELATED/dsp_infer_accuracy/snpe_testsig/
 CPP_RELATED/dsp_infer_accuracy/resnet18_cifar10.bin
 CPP_RELATED/dsp_infer_accuracy/resnet18_cifar10.cpp
 demo_python_app/
+CPP_RELATED/demo_cpp_app/test_inputs/
+*.dlc
