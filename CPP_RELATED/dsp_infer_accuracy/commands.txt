@@ -1,5 +1,9 @@
 for QNN:
 
+QAIRT_ROOT:/opt/qcom/aistack/qairt/2.31.0.250130 in ~/.bashrc
+
+conda activate mlpy310env
+
 qnn-onnx-converter \
     --input_network ../../Training/resnet18_cifar10.onnx \
     --output_path resnet18_cifar10
@@ -17,6 +21,12 @@ qnn-model-lib-generator \
 
 
 for SNPE:
+
+QAIRT_ROOT:/opt/qcom/aistack/snpe/2.10.40.4 in ~/.bashrc
+
+conda activate snpe_py36
+
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 
 snpe-onnx-to-dlc -i ../../Training/resnet18_cifar10.onnx -o resnet18_cifar10.dlc
 
