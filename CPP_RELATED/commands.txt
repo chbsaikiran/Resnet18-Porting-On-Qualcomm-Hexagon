@@ -15,6 +15,9 @@ python3 $HEXAGON_SDK_ROOT/tools/elfsigner/elfsigner.py \
 
 adb push /tmp/testsig/testsig-0x791ff979.so /data/local/tmp/
 
+
+snpe-onnx-to-dlc -i ../../Training/resnet18_cifar10.onnx -o resnet18_cifar10.dlc
+
 1️⃣ What is NDK?
 
 NDK (Native Development Kit) allows you to:

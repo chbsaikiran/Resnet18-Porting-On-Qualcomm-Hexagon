@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-QAIRT_ROOT=${QAIRT_ROOT:-/opt/qcom/aistack/qairt/2.31.0.250130}
+QAIRT_ROOT=${QAIRT_ROOT:-/opt/qcom/aistack/snpe/2.10.40.4}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ONNX_PATH=""
 DLC_OUT="${SCRIPT_DIR}/resnet18_cifar10.dlc"
@@ -48,7 +48,7 @@ echo "  Output:   ${DLC_OUT}"
 echo "  Converter: ${CONVERTER}"
 echo ""
 
-conda run -n mlpy310env python "$CONVERTER" -i "$ONNX_PATH" -o "$DLC_OUT"
+python "$CONVERTER" -i "$ONNX_PATH" -o "$DLC_OUT"
 
 echo ""
 echo "=== DLC created: ${DLC_OUT} ==="

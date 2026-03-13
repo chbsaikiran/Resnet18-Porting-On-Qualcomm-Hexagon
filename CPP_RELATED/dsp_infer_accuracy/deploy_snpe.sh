@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-SNPE_ROOT=${SNPE_ROOT:-/opt/qcom/aistack/qairt/2.31.0.250130}
+SNPE_ROOT=${SNPE_ROOT:-/opt/qcom/aistack/snpe/2.10.40.4}
 HEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT:-/home/saikiran/Qualcomm/Hexagon_SDK/6.5.0.0}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEVICE_DIR=/data/local/tmp/snpe_resnet18
