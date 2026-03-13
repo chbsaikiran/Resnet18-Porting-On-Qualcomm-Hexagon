@@ -40,3 +40,7 @@ CPP_RELATED/dsp_infer_accuracy/resnet18_cifar10.cpp
 demo_python_app/
 CPP_RELATED/demo_cpp_app/test_inputs/
 *.dlc
+resnet18_cifar10_net.json
+resnet18_cifar10.bin
+resnet18_cifar10.cpp
+resnet18_cifar10.dlc

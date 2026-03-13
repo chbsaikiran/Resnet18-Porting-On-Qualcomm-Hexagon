@@ -102,8 +102,10 @@ Without ONNX, there would be no bridge between the training world
 **Command:**
 ```bash
 qnn-onnx-converter \
-    --input_network resnet18_cifar10.onnx \
+    --input_network ../../Training/resnet18_cifar10.onnx \
     --output_path resnet18_cifar10
+rm resnet18_cifar10.cpp
+mv resnet18_cifar10 resnet18_cifar10.cpp
 ```
 
 **Produces:** `resnet18_cifar10.cpp` + `resnet18_cifar10.bin`

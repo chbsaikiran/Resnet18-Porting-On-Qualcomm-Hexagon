@@ -1,0 +1,25 @@
+for QNN:
+
+qnn-onnx-converter \
+    --input_network ../../Training/resnet18_cifar10.onnx \
+    --output_path resnet18_cifar10
+rm resnet18_cifar10.cpp
+mv resnet18_cifar10 resnet18_cifar10.cpp
+
+qnn-model-lib-generator \
+    -c resnet18_cifar10.cpp \
+    -b resnet18_cifar10.bin \
+    -t aarch64-android
+
+./deploy_qnn.sh
+
+./run_qnn_infer.sh 10 cpu
+
+
+for SNPE:
+
+snpe-onnx-to-dlc -i ../../Training/resnet18_cifar10.onnx -o resnet18_cifar10.dlc
+
+./deploy_snpe.sh
+
+./run_snpe_infer.sh 10 cpu

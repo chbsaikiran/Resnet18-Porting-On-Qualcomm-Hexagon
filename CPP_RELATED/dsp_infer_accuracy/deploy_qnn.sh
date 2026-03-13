@@ -56,6 +56,7 @@ adb push "${ARM_LIBS}/libQnnDspNetRunExtensions.so"   "${DEVICE_DIR}/"
 echo ">>> Pushing QNN DSP skel libs (DSP-side, hexagon-v66) ..."
 adb push "${DSP_LIBS}/libQnnDspV66Skel.so" "${DEVICE_DIR}/"
 adb push "${DSP_LIBS}/libQnnDspV66.so"     "${DEVICE_DIR}/"
+#adb push "${DSP_LIBS}/unsigned/libSnpeDspV65Skel.so" "${DEVICE_DIR}/"
 
 echo ">>> Pushing libc++_shared.so (NDK) ..."
 LIBCPP="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"

@@ -21,7 +21,15 @@ DEVICE_DIR=/data/local/tmp/qnn_resnet18
 INPUT_DIR="${SCRIPT_DIR}/qnn_inputs"
 OUTPUT_LOCAL="${SCRIPT_DIR}/qnn_outputs"
 NUM_IMAGES=${1:-100}
-BACKEND=${2:-libQnnDsp.so}
+RAW_BACKEND=${2:-libQnnDsp.so}
+
+# Allow friendly aliases: cpu|gpu|dsp in addition to full lib names.
+case "${RAW_BACKEND}" in
+    cpu|CPU) BACKEND="libQnnCpu.so" ;;
+    gpu|GPU) BACKEND="libQnnGpu.so" ;;
+    dsp|DSP) BACKEND="libQnnDsp.so" ;;
+    *)       BACKEND="${RAW_BACKEND}" ;;
+esac
 
 # --- Step 1: Prepare inputs locally ------------------------------------
 echo "=== Step 1: Preparing CIFAR-10 inputs (${NUM_IMAGES} images) ==="
