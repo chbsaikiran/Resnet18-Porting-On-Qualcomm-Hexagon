@@ -22,6 +22,7 @@ video_infer
 tb_logs/
 build_dsp/
 build_arm/
+build_android/
 qnn_resnet18.cpp
 qnn_resnet18.dlc
 qnn_resnet18.h

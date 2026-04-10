@@ -1,74 +1,122 @@
-# Demo C++ App — Calling the .so Files Directly
+# Demo C++ App — QNN (host) and SNPE (on-device)
 
-This C++ application demonstrates **exactly how the `.so` files are
-used**. It loads them via `dlopen()` at runtime and calls the QNN C API
-to run ResNet18 inference.
+This folder contains two demos:
 
-## The Two .so Files
+| Program | Stack | Where it runs |
+|---------|--------|----------------|
+| `cifar10_qnn_app` | QNN C API + `dlopen` | Linux x86_64 (host) — `./build.sh` |
+| `cifar10_snpe_demo` | SNPE C++ API | Android aarch64 — `./build_android_snpe.sh` |
+
+---
+
+## Part A — QNN host demo (`main.cpp`)
+
+Demonstrates **how the QNN `.so` files are wired**: load backend + model with `dlopen()`, then `QnnModel_composeGraphs` → `graphFinalize` → `graphExecute`.
+
+### The two `.so` files
 
 ```
 ┌───────────────────────────────────────────────────┐
-│  main.cpp  (THIS APPLICATION)                     │
-│                                                   │
-│  dlopen("libQnnCpu.so")           ← BACKEND       │
-│    → QnnInterface_getProviders()                  │
-│    → backendCreate()                              │
-│    → contextCreate()                              │
-│                                                   │
-│  dlopen("libresnet18_cifar10.so") ← MODEL         │
-│    → QnnModel_composeGraphs()                     │
-│    → graphFinalize()                              │
-│    → graphExecute(input, output)                  │
-│                                                   │
-│  Read output logits → argmax → "dog"              │
+│  main.cpp                                         │
+│  dlopen("libQnnCpu.so")      → backend            │
+│  dlopen("libresnet18_cifar10.so") → model         │
+│  graphExecute → argmax → class name               │
 └───────────────────────────────────────────────────┘
 ```
 
-## Build & Run
+### Build and run (host)
 
 ```bash
-# Build
 ./build.sh
-
-# Generate a test input (optional — one is included)
-conda run -n mlpy310env python -c "
-import pickle, numpy as np
-with open('../../Training/data/cifar-10-batches-py/test_batch', 'rb') as f:
-    batch = pickle.load(f, encoding='bytes')
-img = batch[b'data'][42].reshape(3,32,32).astype(np.float32)/255.0
-mean, std = [0.4914,0.4822,0.4465], [0.2470,0.2435,0.2616]
-for c in range(3): img[c] = (img[c]-mean[c])/std[c]
-img.transpose(1,2,0).tofile('test_inputs/img_0042.raw')
-print('Ground truth: dog')
-"
-
-# Run inference
-./build/cifar10_qnn_app test_inputs/img_0042.raw
+./build/cifar10_qnn_app <input_nhwc.raw> [backend.so] [model.so]
 ```
 
-## What the 10 Steps Do
+Input for this path is **float32 NHWC** `1×32×32×3` (12288 bytes).
 
-| Step | QNN API Call | What it does |
-|------|-------------|-------------|
-| 1 | `dlopen("libQnnCpu.so")` | Load the backend engine |
-| 1 | `QnnInterface_getProviders()` | Get the QNN function table |
-| 2 | `backendCreate()` | Create a backend instance |
-| 3 | `contextCreate()` | Create a resource context |
-| 4 | `dlopen("libresnet18_cifar10.so")` | Load the model |
-| 5 | `QnnModel_composeGraphs()` | Build the graph (all ops + weights) |
-| 6 | `graphFinalize()` | Backend optimises for hardware |
-| 7 | *(set up buffers)* | Prepare input/output data |
-| 8 | `graphExecute()` | Run inference (the forward pass) |
-| 9 | *(read output)* | argmax on logits → prediction |
-| 10 | `contextFree()`, `backendFree()`, `dlclose()` | Cleanup |
+DSP/GPU on **device** use the QNN scripts under `../dsp_infer_accuracy/` (`qnn-net-run`), not this host binary.
 
-## To run on DSP instead of CPU
+---
 
-Replace `libQnnCpu.so` with `libQnnDsp.so`:
+## Part B — SNPE on-device demo (`main_snpe.cpp`)
+
+Loads **`resnet18_cifar10_quantized.dlc`** with the SNPE C++ API (`IDlContainer`, `SNPEBuilder`, `execute`). You can choose **DSP**, **GPU**, or **CPU** at the command line (same runtime idea as `snpe-net-run --use_dsp` / `--use_gpu`).
+
+### Input layout
+
+Matches `prepare_cifar10_inputs_snpe.py` in `../dsp_infer_accuracy/`: **float32 NCHW** `1×3×32×32` = **12288 bytes** per image.
+
+### 1. Build (cross-compile)
+
+Requires **Android NDK** and **SNPE** with `lib/aarch64-android/libSNPE.so` and C++ headers under `${SNPE_ROOT}/include/SNPE` (SNPE 2.10 layout).
 
 ```bash
-./build/cifar10_qnn_app test_inputs/img_0042.raw /path/to/libQnnDsp.so
+export NDK_ROOT=/path/to/android-ndk-r27d    # optional; script has a default
+export SNPE_ROOT=/opt/qcom/aistack/snpe/2.10.40.4
+./build_android_snpe.sh
 ```
 
-The application code stays exactly the same — only the backend `.so`
-path changes. The QNN API abstracts away the hardware.
+Output: `build_android/cifar10_snpe_demo`
+
+### 2. Deploy to phone
+
+Pushes the binary, `libSNPE.so`, DSP stubs/skel (and optional RFSA + test signature, same idea as `dsp_infer_accuracy/deploy_snpe.sh`).  
+**DLC** is taken read-only from:
+
+`../dsp_infer_accuracy/resnet18_cifar10_quantized.dlc`
+
+```bash
+./deploy_demo_snpe.sh
+```
+
+Device directory: `/data/local/tmp/demo_snpe_app/`
+
+### 3. Run on device
+
+Prepares **one** CIFAR-10 image using the **existing** script in `dsp_infer_accuracy` (this repo does not modify that folder), pushes it, then runs the demo:
+
+```bash
+./run_demo_snpe.sh          # default runtime: dsp
+./run_demo_snpe.sh cpu
+./run_demo_snpe.sh gpu
+./run_demo_snpe.sh dsp
+```
+
+Manual invocation on device:
+
+```text
+cifar10_snpe_demo <input_nchw.raw> [dsp|gpu|cpu] [path_to.dlc]
+```
+
+Default DLC path inside the binary: `/data/local/tmp/demo_snpe_app/resnet18_cifar10_quantized.dlc`
+
+### Environment variables (deploy)
+
+| Variable | Purpose |
+|----------|---------|
+| `SNPE_ROOT` | SNPE SDK root |
+| `HEXAGON_SDK_ROOT` | For `signer.py` (DSP test signature) |
+| `RFSA_BASE` / `RFSA_DOMAIN` / `RFSA_TARGET_DIR` | Optional RFSA layout overrides (same pattern as `deploy_snpe.sh`) |
+
+---
+
+## QNN step reference (host app)
+
+| Step | QNN API | Role |
+|------|---------|------|
+| 1 | `dlopen` + `QnnInterface_getProviders` | Load backend |
+| 2–3 | `backendCreate`, `contextCreate` | Instances |
+| 4–5 | Model `.so` + `QnnModel_composeGraphs` | Graph |
+| 6 | `graphFinalize` | Optimize |
+| 8 | `graphExecute` | Inference |
+
+---
+
+## SNPE runtime mapping
+
+| `run_demo_snpe.sh` / argv | SNPE |
+|---------------------------|------|
+| `dsp` | `Runtime_t::DSP` (Hexagon) |
+| `gpu` | `Runtime_t::GPU` (Adreno) |
+| `cpu` | `Runtime_t::CPU` |
+
+DSP requires the same style of **skel libraries + library path + test signature** as your working `dsp_infer_accuracy` SNPE flow; `deploy_demo_snpe.sh` mirrors that layout under `/data/local/tmp/demo_snpe_app`.

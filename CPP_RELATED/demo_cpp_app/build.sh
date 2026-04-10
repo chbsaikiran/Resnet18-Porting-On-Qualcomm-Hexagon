@@ -1,5 +1,6 @@
 #!/bin/bash
-# Build the C++ demo app that loads QNN .so files via dlopen.
+# Build the host (x86_64) QNN demo that dlopen()s libQnnCpu.so + model .so.
+# For SNPE on Android, use ./build_android_snpe.sh instead.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
