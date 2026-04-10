@@ -1,4 +1,6 @@
 import torch
+import onnx
+from onnx import shape_inference
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 dummy_input = torch.randn(1, 3, 32, 32).to(device)
@@ -15,3 +17,11 @@ torch.onnx.export(
     opset_version=11,
     do_constant_folding=True,
 )
+
+model = onnx.load("resnet18_cifar10.onnx")
+
+inferred_model = shape_inference.infer_shapes(model)
+
+onnx.save(inferred_model, "resnet18_fixed.onnx")
+
+print("Saved successfully!")

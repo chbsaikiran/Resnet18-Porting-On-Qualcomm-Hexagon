@@ -99,7 +99,7 @@ def main():
             raw_path = os.path.join(args.output_dir, f"img_{i:05d}.raw")
             images[i].tofile(raw_path)
 
-            f_list.write(f"img_{i:05d}.raw\n")
+            f_list.write(f"/data/local/tmp/qnn_resnet18/inputs/img_{i:05d}.raw\n")
             f_labels.write(f"{labels[i]} {CLASSES[labels[i]]}\n")
 
     print(f"Prepared {n} images in {args.output_dir}/")

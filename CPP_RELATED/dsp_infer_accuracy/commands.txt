@@ -3,17 +3,28 @@ for QNN:
 QAIRT_ROOT:/opt/qcom/aistack/qairt/2.31.0.250130 in ~/.bashrc
 
 conda activate mlpy310env
+export PYTHONPATH="${QAIRT_ROOT}/lib/python"
+
+python onnx_simplified.py
+
+python make_nhwc_input_onnx.py --in model_simplified.onnx --out model_nhwc_input.onnx
 
 qnn-onnx-converter \
-    --input_network ../../Training/resnet18_cifar10.onnx \
-    --output_path resnet18_cifar10
-rm resnet18_cifar10.cpp
-mv resnet18_cifar10 resnet18_cifar10.cpp
+  --input_network model_nhwc_input.onnx \
+  --output_path model \
+  -d input_nhwc 1,32,32,3 \
+  --input_layout input_nhwc NHWC \
+  --out_node output
+
+mv model model.cpp
+
 
 qnn-model-lib-generator \
-    -c resnet18_cifar10.cpp \
-    -b resnet18_cifar10.bin \
-    -t aarch64-android
+  -c model.cpp \
+  -b model.bin \
+  -l resnet18_cifar10 \
+  -o ./lib \
+  -t aarch64-android
 
 ./deploy_qnn.sh
 
@@ -29,6 +40,8 @@ conda activate snpe_py36
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 
 snpe-onnx-to-dlc -i ../../Training/resnet18_cifar10.onnx -o resnet18_cifar10.dlc
+snpe-dlc-quantize --input_dlc resnet18_cifar10.dlc --input_list image_file_list.txt
+                  --output_dlc resnet18_cifar10_quantized.dlc
 
 ./deploy_snpe.sh
 

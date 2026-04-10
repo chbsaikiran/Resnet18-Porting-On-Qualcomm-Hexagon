@@ -22,10 +22,17 @@ DEVICE_DIR=/data/local/tmp/snpe_resnet18
 
 # --- Paths to SNPE components -----------------------------------------
 SNPE_NET_RUN="${SNPE_ROOT}/bin/aarch64-android/snpe-net-run"
-MODEL_DLC="${SCRIPT_DIR}/resnet18_cifar10.dlc"
+MODEL_DLC="${SCRIPT_DIR}/resnet18_cifar10_quantized.dlc"
 ARM_LIBS="${SNPE_ROOT}/lib/aarch64-android"
 DSP_V65="${SNPE_ROOT}/lib/hexagon-v65/unsigned"
 DSP_V66="${SNPE_ROOT}/lib/hexagon-v66/unsigned"
+
+# --- Optional: install DSP skels into /vendor/lib/rfsa/* ----------------
+# Writing to /vendor typically needs adb root+remount; on user builds this may
+# fail. We attempt it and always fall back to DEVICE_DIR.
+RFSA_BASE=${RFSA_BASE:-/vendor/lib/rfsa}
+RFSA_DOMAIN=${RFSA_DOMAIN:-}          # optional override: adsp | cdsp
+RFSA_TARGET_DIR=${RFSA_TARGET_DIR:-}  # optional override: full path
 
 # --- Verify DLC exists ------------------------------------------------
 if [ ! -f "$MODEL_DLC" ]; then
@@ -74,12 +81,60 @@ adb push "${ARM_LIBS}/libcalculator.so" "${DEVICE_DIR}/"
 [ -f "${ARM_LIBS}/libSnpeHtpPrepare.so" ] && adb push "${ARM_LIBS}/libSnpeHtpPrepare.so" "${DEVICE_DIR}/"
 
 echo ">>> Pushing SNPE DSP skel libs (DSP-side) ..."
-if [ -d "$DSP_V65" ]; then
-    adb push "${DSP_V65}/libSnpeDspV65Skel.so" "${DEVICE_DIR}/" 2>/dev/null || true
-    adb push "${DSP_V65}/libcalculator_skel.so" "${DEVICE_DIR}/" 2>/dev/null || true
+SKEL_V65_LOCAL="${DSP_V65}/libSnpeDspV65Skel.so"
+SKEL_V66_LOCAL="${DSP_V66}/libSnpeDspV66Skel.so"
+CALC_SKEL_LOCAL="${DSP_V65}/libcalculator_skel.so"
+
+# Decide RFSA install dir if not forced by env
+if [ -z "${RFSA_TARGET_DIR}" ]; then
+    if [ -n "${RFSA_DOMAIN}" ]; then
+        RFSA_TARGET_DIR="${RFSA_BASE}/${RFSA_DOMAIN}"
+    else
+        if adb shell "ls -ld '${RFSA_BASE}/cdsp' >/dev/null 2>&1"; then
+            RFSA_DOMAIN="cdsp"
+            RFSA_TARGET_DIR="${RFSA_BASE}/cdsp"
+        elif adb shell "ls -ld '${RFSA_BASE}/adsp' >/dev/null 2>&1"; then
+            RFSA_DOMAIN="adsp"
+            RFSA_TARGET_DIR="${RFSA_BASE}/adsp"
+        else
+            RFSA_DOMAIN="adsp"
+            RFSA_TARGET_DIR=""
+        fi
+    fi
 fi
-if [ -d "$DSP_V66" ]; then
-    adb push "${DSP_V66}/libSnpeDspV66Skel.so" "${DEVICE_DIR}/" 2>/dev/null || true
+
+if [ -n "${RFSA_TARGET_DIR}" ]; then
+    echo ">>> Attempting RFSA install to ${RFSA_TARGET_DIR} (domain=${RFSA_DOMAIN}) ..."
+    set +e
+    adb root >/dev/null 2>&1
+    adb remount >/dev/null 2>&1
+    set -e
+    set +e
+    [ -f "${SKEL_V65_LOCAL}" ] && adb push "${SKEL_V65_LOCAL}" "${RFSA_TARGET_DIR}/libSnpeDspV65Skel.so" >/dev/null 2>&1
+    RC1=$?
+    [ -f "${CALC_SKEL_LOCAL}" ] && adb push "${CALC_SKEL_LOCAL}" "${RFSA_TARGET_DIR}/libcalculator_skel.so" >/dev/null 2>&1
+    RC2=$?
+    [ -f "${SKEL_V66_LOCAL}" ] && adb push "${SKEL_V66_LOCAL}" "${RFSA_TARGET_DIR}/libSnpeDspV66Skel.so" >/dev/null 2>&1
+    RC3=$?
+    set -e
+    if [ $RC1 -eq 0 ] || [ $RC2 -eq 0 ] || [ $RC3 -eq 0 ]; then
+        echo "  RFSA install attempted (one or more pushes succeeded)."
+    else
+        echo "  WARNING: RFSA install failed (need root/remount or writable rfsa path)."
+    fi
+else
+    echo ">>> RFSA domain dirs not found under ${RFSA_BASE}; skipping RFSA install."
+fi
+
+# Always push to DEVICE_DIR as a fallback
+if [ -f "${SKEL_V65_LOCAL}" ]; then
+    adb push "${SKEL_V65_LOCAL}" "${DEVICE_DIR}/" 2>/dev/null || true
+fi
+if [ -f "${CALC_SKEL_LOCAL}" ]; then
+    adb push "${CALC_SKEL_LOCAL}" "${DEVICE_DIR}/" 2>/dev/null || true
+fi
+if [ -f "${SKEL_V66_LOCAL}" ]; then
+    adb push "${SKEL_V66_LOCAL}" "${DEVICE_DIR}/" 2>/dev/null || true
 fi
 
 # --- Test signature for unsigned DSP loading --------------------------
@@ -98,6 +153,24 @@ if [ -f "$SIGNER" ]; then
     done
 else
     echo "  WARNING: signer.py not found. If DSP fails, generate test signature manually."
+fi
+
+# Also attempt to place the test signature into RFSA domain dir (if available),
+# since some DSP loaders look there first for unsigned PD enablement.
+if [ -n "${RFSA_TARGET_DIR:-}" ]; then
+    for sig in "${TESTSIG_DIR}"/testsig-*.so; do
+        if [ -f "$sig" ]; then
+            set +e
+            adb root >/dev/null 2>&1
+            adb remount >/dev/null 2>&1
+            adb push "$sig" "${RFSA_TARGET_DIR}/" >/dev/null 2>&1
+            RC_SIG=$?
+            set -e
+            if [ $RC_SIG -eq 0 ]; then
+                echo "  pushed $(basename "$sig") to ${RFSA_TARGET_DIR}/"
+            fi
+        fi
+    done
 fi
 
 echo ""

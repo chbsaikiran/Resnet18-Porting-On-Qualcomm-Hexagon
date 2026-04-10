@@ -25,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEVICE_DIR=/data/local/tmp/snpe_resnet18
 INPUT_DIR="${SCRIPT_DIR}/snpe_inputs"
 OUTPUT_LOCAL="${SCRIPT_DIR}/snpe_outputs"
-NUM_IMAGES=${1:-100}
+NUM_IMAGES=${1:-1000}
 RUNTIME=${2:-dsp}
 
 # --- Step 1: Prepare inputs (NCHW for SNPE) ---------------------------
@@ -68,7 +68,7 @@ echo "  Pushed ${NUM_IMAGES} input files"
 echo ""
 echo "=== Step 3: Running SNPE inference ==="
 echo "  Runtime: ${RUNTIME}"
-echo "  Model:   resnet18_cifar10.dlc"
+echo "  Model:   resnet18_cifar10_quantized.dlc"
 echo "  Images:  ${NUM_IMAGES}"
 echo ""
 
@@ -83,10 +83,12 @@ fi
 DSP_LIB_PATH="${DEVICE_DIR};/system/lib/rfsa/adsp;/system/vendor/lib/rfsa/adsp;/dsp"
 
 # Build snpe-net-run arguments
-SNPE_ARGS="--container ${DEVICE_DIR}/resnet18_cifar10.dlc"
+SNPE_ARGS="--container ${DEVICE_DIR}/resnet18_cifar10_quantized.dlc"
 SNPE_ARGS="${SNPE_ARGS} --input_list ${DEVICE_DIR}/inputs/input_list.txt"
+SNPE_ARGS="${SNPE_ARGS} --userlogs verbose"
 SNPE_ARGS="${SNPE_ARGS} --output_dir ${DEVICE_DIR}/outputs"
-SNPE_ARGS="${SNPE_ARGS} --userbuffer_float"
+#SNPE_ARGS="${SNPE_ARGS} --userbuffer_float"
+SNPE_ARGS="${SNPE_ARGS} --platform_options=\"unsignedPD:OFF\""
 
 case "$RUNTIME" in
     dsp) SNPE_ARGS="${SNPE_ARGS} --use_dsp" ;;
@@ -96,8 +98,7 @@ case "$RUNTIME" in
 esac
 
 set +e
-adb shell "cd ${DEVICE_DIR}/inputs && \
-    export LD_LIBRARY_PATH=${DEVICE_DIR} && \
+adb shell "export LD_LIBRARY_PATH=${DEVICE_DIR} && \
     export ADSP_LIBRARY_PATH='${DSP_LIB_PATH}' && \
     export CDSP_LIBRARY_PATH='${DSP_LIB_PATH}' && \
     ${DEVICE_DIR}/snpe-net-run ${SNPE_ARGS}"
