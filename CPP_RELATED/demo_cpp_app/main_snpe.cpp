@@ -118,14 +118,26 @@ int main(int argc, char **argv) {
     printf("  Input    : %s\n", input_path);
     printf("  Runtime  : %s\n\n", runtime_name(runtime));
 
+    zdl::SNPE::SNPEFactory::initializeLogging(zdl::DlSystem::LogLevel_t::LOG_WARN);
+
+    if (!zdl::SNPE::SNPEFactory::isRuntimeAvailable(runtime)) {
+        fprintf(stderr, "WARNING: runtime %s not available on this device; "
+                        "SNPE may fall back to CPU.\n", runtime_name(runtime));
+    } else {
+        printf("  Runtime %s is available.\n\n", runtime_name(runtime));
+    }
+
     auto container = zdl::DlContainer::IDlContainer::open(std::string(dlc_path));
     if (!container) {
         fprintf(stderr, "ERROR: IDlContainer::open(%s) failed\n", dlc_path);
         return 1;
     }
+    printf("  DLC loaded successfully.\n\n");
 
     zdl::SNPE::SNPEBuilder builder(container.get());
-    builder.setRuntimeProcessor(runtime);
+    zdl::DlSystem::RuntimeList runtimeList;
+    runtimeList.add(runtime);
+    builder.setRuntimeProcessorOrder(runtimeList);
     builder.setUseUserSuppliedBuffers(false);
     // Match snpe-net-run --platform_options="unsignedPD:OFF" for DSP loads.
     if (runtime == zdl::DlSystem::Runtime_t::DSP ||
@@ -141,11 +153,30 @@ int main(int argc, char **argv) {
         fprintf(stderr, "ERROR: SNPEBuilder::build() failed\n");
         return 1;
     }
+    printf("  SNPEBuilder::build() OK.\n\n");
+
+    zdl::DlSystem::StringList inputNames  = snpe->getInputTensorNames();
+    zdl::DlSystem::StringList outputNames = snpe->getOutputTensorNames();
+    printf("  Network inputs (%zu):\n",  inputNames.size());
+    for (size_t i = 0; i < inputNames.size();  i++) printf("    %s\n", inputNames.at(i));
+    printf("  Network outputs (%zu):\n", outputNames.size());
+    for (size_t i = 0; i < outputNames.size(); i++) printf("    %s\n", outputNames.at(i));
+    printf("\n");
 
     float *input_host = read_raw_file(input_path, kInputBytes);
     std::unique_ptr<float, decltype(&free)> input_guard(input_host, &free);
 
-    zdl::DlSystem::TensorShape inShape{1, 3, 32, 32};
+    auto maybeShape = snpe->getInputDimensions(inputNames.at(0));
+    if (!maybeShape) {
+        fprintf(stderr, "ERROR: getInputDimensions('%s') failed\n", inputNames.at(0));
+        return 1;
+    }
+    zdl::DlSystem::TensorShape inShape = *maybeShape;
+    printf("  Input tensor shape: [");
+    for (size_t d = 0; d < inShape.rank(); d++)
+        printf("%s%zu", d ? "," : "", (size_t)inShape[d]);
+    printf("]\n\n");
+
     auto inputTensor =
         zdl::SNPE::SNPEFactory::getTensorFactory().createTensor(inShape);
     if (!inputTensor) {
@@ -153,16 +184,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    float *tensor_ptr =
-        reinterpret_cast<float *>(inputTensor->begin().dataPointer());
-    if (!tensor_ptr) {
-        fprintf(stderr, "ERROR: input tensor has no writable pointer\n");
-        return 1;
-    }
-    memcpy(tensor_ptr, input_host, kInputBytes);
+    std::copy(input_host, input_host + kInputBytes / sizeof(float),
+              inputTensor->begin());
 
+    // Use TensorMap form so the input is identified by name, not position.
+    zdl::DlSystem::TensorMap inputMap;
+    inputMap.add(inputNames.at(0), inputTensor.get());
     zdl::DlSystem::TensorMap outputMap;
-    if (!snpe->execute(inputTensor.get(), outputMap)) {
+    if (!snpe->execute(inputMap, outputMap)) {
         fprintf(stderr, "ERROR: SNPE::execute failed\n");
         return 1;
     }
@@ -182,12 +211,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "ERROR: output tensor '%s' not found\n", outNames.at(0));
         return 1;
     }
-    const float *logits = reinterpret_cast<const float *>(
-        outTensor->begin().dataPointer());
-    if (!logits) {
-        fprintf(stderr, "ERROR: output tensor has no data pointer\n");
-        return 1;
-    }
+    const float *logits = &(*outTensor->cbegin());
 
     // SNPE ITensor::getSize() is the element count (not bytes).
     size_t out_count = outTensor->getSize();

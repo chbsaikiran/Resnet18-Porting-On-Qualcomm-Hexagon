@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-SNPE_ROOT="${SNPE_ROOT:-/opt/qcom/aistack/snpe/2.10.40.4}"
+SNPE_ROOT="${SNPE_ROOT:-/opt/qcom/aistack/qairt/2.31.0.250130}"
 HEXAGON_SDK_ROOT="${HEXAGON_SDK_ROOT:-/home/saikiran/Qualcomm/Hexagon_SDK/6.5.0.0}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEVICE_DIR=/data/local/tmp/demo_snpe_app
@@ -21,6 +21,8 @@ DSP_INF="${SCRIPT_DIR}/../dsp_infer_accuracy/resnet18_cifar10_quantized.dlc"
 BIN_LOCAL="${SCRIPT_DIR}/build_android/cifar10_snpe_demo"
 
 ARM_LIBS="${SNPE_ROOT}/lib/aarch64-android"
+NDK_ROOT="${NDK_ROOT:-/home/saikiran/NDK/android-ndk-r27d}"
+NDK_CXX_SHARED="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
 DSP_V65="${SNPE_ROOT}/lib/hexagon-v65/unsigned"
 DSP_V66="${SNPE_ROOT}/lib/hexagon-v66/unsigned"
 
@@ -55,13 +57,25 @@ echo ">>> Pushing SNPE runtime libs ..."
 adb push "${ARM_LIBS}/libSNPE.so" "${DEVICE_DIR}/"
 if [[ -f "${ARM_LIBS}/libc++_shared.so" ]]; then
     adb push "${ARM_LIBS}/libc++_shared.so" "${DEVICE_DIR}/"
+elif [[ -f "${NDK_CXX_SHARED}" ]]; then
+    echo "  libc++_shared.so not in SNPE libs; using NDK copy."
+    adb push "${NDK_CXX_SHARED}" "${DEVICE_DIR}/"
 else
-    echo "  WARNING: libc++_shared.so not under ${ARM_LIBS}; using device copy if present."
+    echo "  WARNING: libc++_shared.so not found in SNPE libs or NDK; may fail at runtime."
 fi
-[[ -f "${ARM_LIBS}/libcalculator.so" ]] && adb push "${ARM_LIBS}/libcalculator.so" "${DEVICE_DIR}/"
-[[ -f "${ARM_LIBS}/libSnpeDspV65Stub.so" ]] && adb push "${ARM_LIBS}/libSnpeDspV65Stub.so" "${DEVICE_DIR}/"
-[[ -f "${ARM_LIBS}/libSnpeDspV66Stub.so" ]] && adb push "${ARM_LIBS}/libSnpeDspV66Stub.so" "${DEVICE_DIR}/"
-[[ -f "${ARM_LIBS}/libSnpeHtpPrepare.so" ]] && adb push "${ARM_LIBS}/libSnpeHtpPrepare.so" "${DEVICE_DIR}/"
+# QNN backend libs — SNPE 2.31 wraps QNN and dlopen's these at runtime
+for lib in \
+    libQnnModelDlc.so \
+    libQnnSystem.so   \
+    libQnnCpu.so      \
+    libQnnGpu.so      \
+    libQnnDsp.so      \
+    libQnnHtp.so      \
+    libSnpeDspV66Stub.so \
+    libSnpeHtpPrepare.so \
+    libcalculator.so; do
+    [[ -f "${ARM_LIBS}/${lib}" ]] && adb push "${ARM_LIBS}/${lib}" "${DEVICE_DIR}/"
+done
 
 SKEL_V65_LOCAL="${DSP_V65}/libSnpeDspV65Skel.so"
 SKEL_V66_LOCAL="${DSP_V66}/libSnpeDspV66Skel.so"
